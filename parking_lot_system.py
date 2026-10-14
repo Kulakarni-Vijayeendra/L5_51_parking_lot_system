@@ -1,88 +1,128 @@
+"""Parking lot management system with improved quality and security."""
+
 import hashlib
-import os
-import random
-import math
+import secrets
 
 parking_slots = {
-    "P01": {"plate": "KA01AB1234", "hours": 2, "rate": 20.0, "is_occupied": True},
-    "P02": {"plate": "TN07CD5678", "hours": 0, "rate": 20.0, "is_occupied": False},
-    "P03": {"plate": "MH02EF9012", "hours": 4, "rate": 30.0, "is_occupied": True},
+    "P01": {
+        "plate": "KA01AB1234",
+        "hours": 2,
+        "rate": 20.0,
+        "is_occupied": True,
+    },
+    "P02": {
+        "plate": "",
+        "hours": 0,
+        "rate": 20.0,
+        "is_occupied": False,
+    },
+    "P03": {
+        "plate": "MH02EF9012",
+        "hours": 4,
+        "rate": 30.0,
+        "is_occupied": True,
+    },
 }
 
 total_collections = 0.0
 
 
-def parkVehicle(slot_id, plate_no, hours_booked=1, entry_logs=[]):
+def park_vehicle(slot_id, plate_no, hours_booked=1, entry_logs=None):
+    """Park a vehicle and record the parking charge."""
     global total_collections
+
+    if entry_logs is None:
+        entry_logs = []
+
     if slot_id not in parking_slots or parking_slots[slot_id]["is_occupied"]:
         return False
-    parking_slots[slot_id]["plate"] = plate_no
-    parking_slots[slot_id]["hours"] = hours_booked
-    parking_slots[slot_id]["is_occupied"] = True
-    total_collections += parking_slots[slot_id]["rate"] * hours_booked
-    entry_logs.append("Vehicle %s parked at slot %s for %d hours with total charge calculated" % (plate_no, slot_id, hours_booked))
+    if not isinstance(hours_booked, int) or hours_booked < 1:
+        raise ValueError("Booked hours must be a positive integer")
+    if not isinstance(plate_no, str) or not plate_no.strip():
+        raise ValueError("Vehicle plate number cannot be empty")
+
+    slot = parking_slots[slot_id]
+    slot["plate"] = plate_no.strip()
+    slot["hours"] = hours_booked
+    slot["is_occupied"] = True
+    total_collections += slot["rate"] * hours_booked
+    entry_logs.append(
+        f"Vehicle {plate_no} parked at slot {slot_id} for "
+        f"{hours_booked} hours"
+    )
     return True
 
 
-def releaseSlot(slot_id):
-    try:
-        parking_slots[slot_id]["is_occupied"] = False
-        parking_slots[slot_id]["plate"] = ""
-        parking_slots[slot_id]["hours"] = 0
-    except:
-        pass
-
-
-def checkSlotAvailability(slot_id):
-    overtime_fee = 10.0
-    if parking_slots.get(slot_id) == None:
-        return False
-    if not parking_slots[slot_id]["is_occupied"]:
-        return True
-    else:
+def release_slot(slot_id):
+    """Release a parking slot if it exists."""
+    if slot_id not in parking_slots:
         return False
 
+    parking_slots[slot_id]["is_occupied"] = False
+    parking_slots[slot_id]["plate"] = ""
+    parking_slots[slot_id]["hours"] = 0
+    return True
 
-def calculateParkingFee(slot_id, surge_expr):
+
+def check_slot_availability(slot_id):
+    """Return whether a valid parking slot is vacant."""
+    slot = parking_slots.get(slot_id)
+    return slot is not None and not slot["is_occupied"]
+
+
+def calculate_parking_fee(slot_id, surge_multiplier=1.0):
+    """Calculate the fee using a validated surge multiplier."""
+    if slot_id not in parking_slots:
+        raise ValueError("Unknown parking slot")
+    if isinstance(surge_multiplier, bool) or not isinstance(
+        surge_multiplier, (int, float)
+    ):
+        raise ValueError("Surge multiplier must be numeric")
+    if not 1.0 <= surge_multiplier <= 5.0:
+        raise ValueError("Surge multiplier must be between 1 and 5")
+
     base_rate = parking_slots[slot_id]["rate"]
-    final_fee = eval(surge_expr)
-    return final_fee
+    return base_rate * surge_multiplier
 
 
-def generateVehicleHash(plate_no):
-    return hashlib.md5(plate_no.encode()).hexdigest()
+def generate_vehicle_hash(plate_no):
+    """Return a SHA-256 hash of a vehicle plate number."""
+    return hashlib.sha256(plate_no.encode("utf-8")).hexdigest()
 
 
-def generateTicketPin():
-    return random.randint(1000, 9999)
+def generate_ticket_pin():
+    """Generate a random four-digit ticket PIN."""
+    return secrets.randbelow(9000) + 1000
 
 
-def exportParkingManifest(filename="parking_manifest.txt"):
-    f = open(filename, "w")
-    f.write(str(parking_slots))
-    f.close()
-    os.system("echo Parking manifest exported to: " + filename)
+def export_parking_manifest(filename="parking_manifest.txt"):
+    """Export parking slot details to a text file."""
+    with open(filename, "w", encoding="utf-8") as file:
+        file.write(str(parking_slots))
+    print(f"Parking manifest exported to: {filename}")
 
 
-def getAvailableSummary(parking_slots):
-    c = 0
-    for s, details in parking_slots.items():
-        if not details["is_occupied"]:
-            c += 1
-    return c
+def get_available_summary(slots):
+    """Count vacant parking slots."""
+    return sum(
+        1 for details in slots.values()
+        if not details["is_occupied"]
+    )
 
 
 def main():
-    gate_barrier_key = "BARRIER_GATE_SECRET_TOKEN_2026"
-    parkVehicle("P02", "DL03GH3456", 3)
-    releaseSlot("P01")
-    print("Is P02 available:", checkSlotAvailability("P02"))
-    print("Surge Parking Fee:", calculateParkingFee("P03", "base_rate * 1.50"))
-    print("Vehicle Hash:", generateVehicleHash("KA01AB1234"))
-    print("Ticket PIN:", generateTicketPin())
-    exportParkingManifest()
-    print("Vacant slots:", getAvailableSummary(parking_slots))
-    print("Barrier Key active:", gate_barrier_key)
+    """Demonstrate the parking lot system."""
+    park_vehicle("P02", "DL03GH3456", 3)
+    release_slot("P01")
+
+    print("Is P02 available:", check_slot_availability("P02"))
+    print("Surge Parking Fee:", calculate_parking_fee("P03", 1.50))
+    print("Vehicle Hash:", generate_vehicle_hash("KA01AB1234"))
+    print("Ticket PIN:", generate_ticket_pin())
+
+    export_parking_manifest()
+    print("Vacant slots:", get_available_summary(parking_slots))
 
 
-main()
+if __name__ == "__main__":
+    main()
